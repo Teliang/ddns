@@ -7,6 +7,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.AbstractMap;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +34,7 @@ public class NamesiloServiceImp extends AbstractDNSService implements DNSService
 	}
 
 	@Override
-	public void addRecord() {
+	public void addRecord(String hostName) {
 //		add
 		var baseUri = "https://www.namesilo.com/api/dnsAddRecord";
 		Map<String, String> parameters = new HashMap<String, String>() {
@@ -43,7 +44,7 @@ public class NamesiloServiceImp extends AbstractDNSService implements DNSService
 				put("key", config.getKey());
 				put("domain", config.getDomain());
 				put("rrtype", config.getType());
-				put("rrhost", "");
+				put("rrhost", hostName);
 				put("rrvalue", config.getCurrentIp());
 				put("rrttl", "3600");
 			}
@@ -74,7 +75,7 @@ public class NamesiloServiceImp extends AbstractDNSService implements DNSService
 	}
 
 	@Override
-	public void updateRecord(Entry<String, String> entry) {
+	public void updateRecord(Entry<String, String> entry, String hostName) {
 //		update
 		var baseUri = "https://www.namesilo.com/api/dnsUpdateRecord";
 
@@ -85,7 +86,7 @@ public class NamesiloServiceImp extends AbstractDNSService implements DNSService
 				put("key", config.getKey());
 				put("domain", config.getDomain());
 				put("rrtype", config.getType());
-				put("rrhost", "");
+				put("rrhost", hostName);
 				put("rrvalue", config.getCurrentIp());
 				put("rrttl", "3600");
 				put("rrid", entry.getKey());
@@ -117,8 +118,9 @@ public class NamesiloServiceImp extends AbstractDNSService implements DNSService
 	}
 
 	@Override
-	public Entry<String, String> getRecordIdAndIp() {
+	public Map<String, Entry<String, String>> getAllRecords() {
 
+		HashMap<String, Entry<String, String>> hashMap = new HashMap<String, Entry<String, String>>();
 		var url = "https://www.namesilo.com/api/dnsListRecords?version=1&type=xml&key=%s&domain=%s"
 				.formatted(config.getKey(), config.getDomain());
 
@@ -127,50 +129,47 @@ public class NamesiloServiceImp extends AbstractDNSService implements DNSService
 		// Create a GET HttpRequest
 		HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).build();
 		// Send the request and get the response
-		Entry<String, String> entry = client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-				.thenApply(HttpResponse::body).thenApply(e -> {
-					Entry<String, String> simpleEntry = null;
-					try {
-						XmlMapper mapper = new XmlMapper();
-						logger.debug("dnsListRecords response : {}", e);
-						Map map = mapper.readValue(e, Map.class);
-						if (!isSucces(map)) {
-							logger.error("dnsListRecords request is not Succes, response : {}", e);
-							return simpleEntry;
+		client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(HttpResponse::body).thenAccept(e -> {
+			try {
+				XmlMapper mapper = new XmlMapper();
+				logger.debug("dnsListRecords response : {}", e);
+				Map map = mapper.readValue(e, Map.class);
+				if (!isSucces(map)) {
+					logger.error("dnsListRecords request is not Succes, response : {}", e);
+					return;
+				}
+				map = (Map) map.get("reply");
+				Object resourceRecord = map.get("resource_record");
+				if (resourceRecord instanceof List) {
+					List<Map<String, String>> list = (List<Map<String, String>>) resourceRecord;
+					for (var obj : list) {
+						if (config.getType().equals(obj.get("type"))) {
+							String recordId = obj.get("record_id");
+							String value = obj.get("value");
+							SimpleEntry<String, String> simpleEntry = new AbstractMap.SimpleEntry<String, String>(
+									recordId, value);
+							hashMap.put(obj.get("host"), simpleEntry);
 						}
-						map = (Map) map.get("reply");
-						Object resourceRecord = map.get("resource_record");
-						if (resourceRecord instanceof List) {
-							List<Map<String, String>> list = (List<Map<String, String>>) resourceRecord;
-							for (var obj : list) {
-								if (config.getDomain().equals(obj.get("host"))
-										&& config.getType().equals(obj.get("type"))) {
-									String recordId = obj.get("record_id");
-									String value = obj.get("value");
-									simpleEntry = new AbstractMap.SimpleEntry<String, String>(recordId, value);
-									break;
-								}
-							}
-						} else if (resourceRecord instanceof Map) {
-							Map<String, String> obj = (Map<String, String>) resourceRecord;
-							if (config.getDomain().equals(obj.get("host"))
-									&& config.getType().equals(obj.get("type"))) {
-								String recordId = obj.get("record_id");
-								String value = obj.get("value");
-								simpleEntry = new AbstractMap.SimpleEntry<String, String>(recordId, value);
-							}
-						} else {
-							logger.info("dnsListRecords resourceRecord -- : {}", resourceRecord);
-						}
-
-					} catch (JsonProcessingException e1) {
-						logger.error("dnsListRecords JsonProcessingException", e);
 					}
-					return simpleEntry;
-				}).join();
+				} else if (resourceRecord instanceof Map) {
+					Map<String, String> obj = (Map<String, String>) resourceRecord;
+					if (config.getType().equals(obj.get("type"))) {
+						String recordId = obj.get("record_id");
+						String value = obj.get("value");
+						SimpleEntry<String, String> simpleEntry = new AbstractMap.SimpleEntry<>(recordId, value);
+						hashMap.put(obj.get("host"), simpleEntry);
+					}
+				} else {
+					logger.info("dnsListRecords resourceRecord -- : {}", resourceRecord);
+				}
 
-		logger.info("get recordId And Ip : {}", entry);
-		return entry;
+			} catch (JsonProcessingException e1) {
+				logger.error("dnsListRecords JsonProcessingException", e);
+			}
+		}).join();
+
+		logger.info("get recordId And Ip : {}", hashMap);
+		return hashMap;
 
 	}
 

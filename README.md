@@ -14,6 +14,6 @@ It allows you to dynamically update your DNS records based on your current publi
 ```sh
 mvn package
 
-java -jar target/ddns-0.0.1-SNAPSHOT-jar-with-dependencies.jar --domain=YOURDOMAIN --key=YOURKEY
+java -jar target/ddns-0.0.1-SNAPSHOT-jar-with-dependencies.jar --domain=YOURDOMAIN --hostNames=,HOSTNAME --key=YOURKEY
 ```
 

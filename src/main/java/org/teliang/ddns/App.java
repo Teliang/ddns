@@ -1,5 +1,6 @@
 package org.teliang.ddns;
 
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 
@@ -23,6 +24,8 @@ public class App implements Runnable {
 
 	@Option(names = { "--domain" }, required = true, description = "domain")
 	String domain;
+	@Option(names = { "--hostNames" }, required = true, description = "hostNames")
+	String hostNames;
 	@Option(names = { "--type" }, defaultValue = "A", description = "domain type")
 	String type;
 	@Option(names = { "--key" }, required = true, description = "service api key")
@@ -42,6 +45,7 @@ public class App implements Runnable {
 		config.setType(type);
 		config.setKey(key);
 		config.setExecuteFixTime(Long.valueOf(executeFixTime) * 1000);
+		config.setHostNames(hostNames.split(","));
 
 		DNSService dnsService = new NamesiloServiceImp(config);
 		while (true) {
@@ -49,13 +53,22 @@ public class App implements Runnable {
 			logger.info("get current ip : {}", currentIp);
 			config.setCurrentIp(currentIp);
 
-			Entry<String, String> entry = dnsService.getRecordIdAndIp();
-			if (entry == null) {
-				dnsService.addRecord();
-			} else if (!Objects.equals(currentIp, entry.getValue())) {
-				dnsService.updateRecord(entry);
-			} else {
-				logger.info("current ip equals dns ip!");
+			Map<String, Entry<String, String>> map = dnsService.getAllRecords();
+			for (var hostName : config.getHostNames()) {
+				String fullDomain = "";
+				if (hostName != null && !hostName.isEmpty()) {
+					fullDomain = hostName + "." + config.getDomain();
+				} else {
+					fullDomain = config.getDomain();
+				}
+				Entry<String, String> entry = map.get(fullDomain);
+				if (entry == null) {
+					dnsService.addRecord(hostName);
+				} else if (!Objects.equals(currentIp, entry.getValue())) {
+					dnsService.updateRecord(entry, hostName);
+				} else {
+					logger.info("fullDomain: {} ,current ip equals dns ip!", fullDomain);
+				}
 			}
 
 			try {

@@ -1,11 +1,23 @@
 package org.teliang.ddns;
 
+import java.util.Arrays;
+
 public class Config {
 	private String domain;
 	private String type;
 	private String key;
 	private long executeFixTime;
 	private String currentIp;
+	private String[] hostNames;
+
+
+	public String[] getHostNames() {
+		return hostNames;
+	}
+
+	public void setHostNames(String[] hostNames) {
+		this.hostNames = hostNames;
+	}
 
 	public String getCurrentIp() {
 		return currentIp;
@@ -45,6 +57,12 @@ public class Config {
 
 	public void setExecuteFixTime(long executeFixTime) {
 		this.executeFixTime = executeFixTime;
+	}
+
+	@Override
+	public String toString() {
+		return "Config [domain=" + domain + ", type=" + type + ", key=" + key + ", executeFixTime=" + executeFixTime
+				+ ", currentIp=" + currentIp + ", hostNames=" + Arrays.toString(hostNames) + "]";
 	}
 
 }
